@@ -214,7 +214,7 @@ def findCargo(frame, mask):
 # centerX is center x coordinate of image
 # centerY is center y coordinate of image
 def findBall(contours, image, centerX, centerY):
-    screenHeight, screenWidth, channels = image.shape;
+    screenHeight, screenWidth, channels = image.shape
     #Seen vision targets (correct angle, adjacent to each other)
     cargo = []
 
@@ -280,35 +280,32 @@ def findBall(contours, image, centerX, centerY):
                     if [cx, cy, cnt] not in biggestCargo:
                          biggestCargo.append([cx, cy, cnt])
 
-
-
         # Check if there are cargo seen
         if (len(biggestCargo) > 0):
             #pushes that it sees cargo to network tables
 
-#sog            networkTable.putBoolean("cargoDetected", True)
+            networkTable.putBoolean("cargoDetected", False)
 
             # Sorts targets based on x coords to break any angle tie
             biggestCargo.sort(key=lambda x: math.fabs(x[0]))
             closestCargo = min(biggestCargo, key=lambda x: (math.fabs(x[0] - centerX)))
             xCoord = closestCargo[0]
             finalTarget = calculateYaw(xCoord, centerX, H_FOCAL_LENGTH)
-            print("Yaw: " + str(finalTarget))
+            #print("Yaw: " + str(finalTarget))
             # Puts the yaw on screen
             # Draws yaw of target + line where center of target is
-            cv2.putText(image, "Yaw: " + str(finalTarget), (40, 40), cv2.FONT_HERSHEY_COMPLEX, .6,
-                        (255, 255, 255))
+            cv2.putText(image, "Yaw: " + str(finalTarget), (40, 40), cv2.FONT_HERSHEY_COMPLEX, .6,(255, 255, 255))
             cv2.line(image, (xCoord, screenHeight), (xCoord, 0), (255, 0, 0), 2)
 
             currentAngleError = finalTarget
             #pushes cargo angle to network tables
-            print("cargoYaw")
-#sog            networkTable.putNumber("cargoYaw", currentAngleError)
+            #print("cargoYaw")
+            networkTable.putNumber("cargoYaw", currentAngleError)
 
         else:
             #pushes that it doesn't see cargo to network tables
-            print("CargoDetected")
-#sog            networkTable.putBoolean("cargoDetected", False)
+            # print("CargoDetected")
+            networkTable.putBoolean("cargoDetected", False)
 
         cv2.line(image, (round(centerX), screenHeight), (round(centerX), 0), (255, 255, 255), 2)
 
@@ -364,12 +361,11 @@ def findTape(contours, image, centerX, centerY):
                     # Draws rotated rectangle
                     cv2.drawContours(image, [box], 0, (23, 184, 80), 3)
 
-
+                    
                     # Calculates yaw of contour (horizontal position in degrees)
                     yaw = calculateYaw(cx, centerX, H_FOCAL_LENGTH)
                     # Calculates yaw of contour (horizontal position in degrees)
                     pitch = calculatePitch(cy, centerY, V_FOCAL_LENGTH)
-                    print("Pitch "+str(pitch))
 
 
                     # Draws a vertical white line passing through center of contour
@@ -429,16 +425,22 @@ def findTape(contours, image, centerX, centerY):
                         continue
                 #Angle from center of camera to target (what you should pass into gyro)
                 yawToTarget = calculateYaw(centerOfTarget, centerX, H_FOCAL_LENGTH)
-                print("diff "+str(math.fabs(cx1-cx2)))
+                # print("diff "+str(math.fabs(cx1-cx2)))
+                thisDistance = calculateDistance2(cx1-cx2)
+                if thisDistance > 12:  
+                    thisDistance = thisDistance - 12
+                
+                networkTable.putNumber("Distance",thisDistance)
+                
                 #Make sure no duplicates, then append
                 if [centerOfTarget, yawToTarget] not in targets:
                     targets.append([centerOfTarget, yawToTarget])
     #Check if there are targets seen
     if (len(targets) > 0):
         # pushes that it sees vision target to network tables
-        print("tapeDetected")
+        #print("tapeDetected")
 
-#sog        networkTable.putBoolean("tapeDetected", True)
+        networkTable.putBoolean("tapeDetected", True)
         #Sorts targets based on x coords to break any angle tie
         targets.sort(key=lambda x: math.fabs(x[0]))
         finalTarget = min(targets, key=lambda x: math.fabs(x[1]))
@@ -450,14 +452,13 @@ def findTape(contours, image, centerX, centerY):
 
         currentAngleError = finalTarget[1]
         # pushes vision target angle to network tables
-        print("tapeYaw")
-
-#sog        networkTable.putNumber("tapeYaw", currentAngleError)
+        #print("tapeYaw")
+        networkTable.putNumber("tapeYaw", currentAngleError)
     else:
         # pushes that it deosn't see vision target to network tables
-        print("tapeDetected")
+        #print("tapeDetected")
 
-#sog        networkTable.putBoolean("tapeDetected", False)
+        networkTable.putBoolean("tapeDetected", False)
 
     cv2.line(image, (round(centerX), screenHeight), (round(centerX), 0), (255, 255, 255), 2)
 
@@ -481,6 +482,22 @@ def translateRotation(rotation, width, height):
     rotation *= -1
     return round(rotation)
 
+def calculateDistance2(dist):
+    Tpix = math.fabs(dist)
+    tin = 12
+    FOVP = 255
+    Ang = 68.5
+    thetaDeg = math.tan(Ang) 
+    theta = math.fabs(thetaDeg)
+
+    if (Tpix > 0.0) and (theta > 0.0):
+        # print(Tpix)
+        # print(theta)
+        Distance2 = ((tin * FOVP) / (2*Tpix*theta))
+    else:
+        Distance2 = 0
+    # print(Distance2)
+    return Distance2 
 
 def calculateDistance(heightOfCamera, heightOfTarget, pitch):
     heightOfTargetFromCamera = heightOfTarget - heightOfCamera
@@ -566,9 +583,9 @@ cameraConfigs = []
 
 """Report parse error."""
 def parseError(str):
-    print("config error in '" + configFile + "': " + str, file=sys.stderr)
+    #print("config error in '" + configFile + "': " + str, file=sys.stderr)
 
-"""Read single camera configuration."""
+    """Read single camera configuration."""
 def readCameraConfig(config):
     cam = CameraConfig()
 
@@ -601,7 +618,7 @@ def readConfig():
         with open(configFile, "rt") as f:
             j = json.load(f)
     except OSError as err:
-        print("could not open '{}': {}".format(configFile, err), file=sys.stderr)
+        #print("could not open '{}': {}".format(configFile, err), file=sys.stderr)
         return False
 
     # top level must be an object
@@ -640,7 +657,7 @@ def readConfig():
 
 """Start running the camera."""
 def startCamera(config):
-    print("Starting camera '{}' on {}".format(config.name, config.path))
+    #print("Starting camera '{}' on {}".format(config.name, config.path))
     cs = CameraServer.getInstance()
     camera = cs.startAutomaticCapture(name=config.name, path=config.path)
 
@@ -657,16 +674,16 @@ if __name__ == "__main__":
 
     # start NetworkTables
 
-#sog    ntinst = NetworkTablesInstance.getDefault()
+    ntinst = NetworkTablesInstance.getDefault()
     #Name of network table - this is how it communicates with robot. IMPORTANT
-#sog    networkTable = NetworkTables.getTable('MonsterVision')
+    networkTable = NetworkTables.getTable('MonsterVision')
 
     if server:
-        print("Setting up NetworkTables server")
-#sog        ntinst.startServer()
+        #print("Setting up NetworkTables server")
+        ntinst.startServer()
     else:
-        print("Setting up NetworkTables client for team {}".format(team))
-#sog        ntinst.startClientTeam(team)
+        #print("Setting up NetworkTables client for team {}".format(team))
+        ntinst.startClientTeam(team)
 
 
     # start cameras
@@ -691,6 +708,16 @@ if __name__ == "__main__":
     #cap.autoExpose=True;
     tape = False
 
+    #if(networkTable.getBoolean("Driver",False)):
+        #print("Driver True")
+    #else:
+        #print("Driver False")
+
+    #if(networkTable.getBoolean("Tape",False)):
+        #print("Tape True")
+    #else:
+        #print("Tape False")
+
     #TOTAL_FRAMES = 200;
     # loop forever
     while True:
@@ -701,21 +728,23 @@ if __name__ == "__main__":
         #frame = flipImage(img)
         #Comment out if camera is mounted upside down
         frame = img
+
         if timestamp == 0:
             # Send the output the error.
             streamViewer.notifyError(cap.getError());
             # skip the rest of the current iteration
             continue
         #Checks if you just want camera for driver (No processing), False by default
-#sog        if(networkTable.getBoolean("Driver", False)):
-        if(False):
+        if(networkTable.getBoolean("Driver", False)):
+        # if(False):
             cap.autoExpose = True
             processed = frame
         else:
             # Checks if you just want camera for Tape processing , False by default
             if(True):
-#sog            if(networkTable.getBoolean("Tape", False))
+            # if(networkTable.getBoolean("Tape", True)):
                 #Lowers exposure to 0
+                #print("Driver is false, Tape is true")
                 cap.autoExpose = False
                 boxBlur = blurImg(frame, green_blur)
                 threshold = threshold_video(lower_green, upper_green, boxBlur)
@@ -728,10 +757,10 @@ if __name__ == "__main__":
                 processed = findCargo(frame, threshold)
         #Puts timestamp of camera on netowrk tables
 
-#sog        networkTable.putNumber("VideoTimestamp", timestamp)
-        streamViewer.frame = processed;
+        networkTable.putNumber("VideoTimestamp", timestamp)
+        streamViewer.frame = processed
         #Flushes camera values to reduce latency
-#sog        ntinst.flush()
+        ntinst.flush()
 
 
 
